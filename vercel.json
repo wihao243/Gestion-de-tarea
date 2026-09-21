@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "main.py",
+      "use": "@vercel/python",
+      "config": { "maxDuration": 30 }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "main.py"
+    },
+    {
+      "src": "/css/(.*)",
+      "dest": "/css/$1"
+    },
+    {
+      "src": "/js/(.*)",
+      "dest": "/js/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
+}

@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#2563EB">
+  <title>QuestKeeper · Tareas DAM + XP</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Roboto', 'ui-sans-serif', 'system-ui', 'sans-serif'] }
+        }
+      }
+    }
+  </script>
+  <style>
+    html, body { height: 100%; }
+    body { font-family: 'Roboto', sans-serif; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+    @keyframes popIn { from { opacity: 0; transform: scale(.93) } to { opacity: 1; transform: scale(1) } }
+    @keyframes toastUp { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: translateY(0) } }
+    .animate-fade { animation: fadeIn .18s ease-out }
+    .animate-pop { animation: popIn .18s ease-out }
+    .animate-toast { animation: toastUp .2s ease-out }
+    .day-cell { transition: background .12s ease; }
+    .day-cell:hover { background: #f9fafb; }
+    .cell-event { transition: opacity .12s, transform .12s; }
+    .cell-event:hover { transform: translateY(-1px); }
+    .xp-bar-fill { transition: width .5s cubic-bezier(.22,1,.36,1); }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-800 antialiased min-h-screen">
+
+  <header class="flex flex-wrap items-center gap-3 px-4 md:px-8 py-3 border-b border-gray-200 bg-white shadow-sm z-20 sticky top-0">
+    <div class="flex items-center gap-2">
+      <div class="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+      </div>
+      <div class="leading-tight">
+        <h1 class="text-base md:text-lg font-medium text-gray-800">QuestKeeper · DAM</h1>
+        <p class="text-[11px] text-gray-500 hidden sm:block">Organiza tus misiones y gana XP por asignatura</p>
+      </div>
+    </div>
+    <div class="ml-auto flex items-center gap-2">
+      <div id="totalXpPill" class="hidden md:flex items-center gap-2 rounded-full bg-amber-50 border border-amber-200 px-3.5 py-1.5" title="XP total acumulado">
+        <svg class="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg>
+        <span id="totalXpLabel" class="text-sm font-semibold text-amber-700"></span>
+      </div>
+    </div>
+  </header>
+
+  <div class="grid grid-cols-1 lg:grid-cols-10 gap-6 px-3 md:px-8 py-5 max-w-[1500px] mx-auto w-full">
+
+    <section class="lg:col-span-7 min-w-0">
+      <div class="flex flex-wrap items-center gap-2 md:gap-3 mb-4">
+        <button id="btnToday" class="rounded-full border border-gray-300 px-3.5 py-1.5 text-sm text-gray-700 hover:bg-gray-100 transition-colors">Hoy</button>
+        <button id="btnPrev" class="w-9 h-9 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100 transition-colors" title="Mes anterior">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+        </button>
+        <button id="btnNext" class="w-9 h-9 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100 transition-colors" title="Mes siguiente">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </button>
+        <h2 id="monthTitle" class="text-lg md:text-xl font-normal text-gray-800 min-w-[140px]"></h2>
+      </div>
+      <div id="dayLabels" class="grid grid-cols-7"></div>
+      <div id="calendarGrid" class="grid grid-cols-7 border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-sm"></div>
+    </section>
+
+    <aside class="lg:col-span-3 min-w-0 lg:sticky lg:top-20 lg:h-[calc(100vh-6rem)] lg:overflow-y-auto">
+      <div class="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200 shrink-0">
+          <h3 class="font-semibold text-gray-900 flex items-center gap-2">
+            <svg class="w-5 h-5 text-indigo-600" fill="currentColor" viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg>
+            Panel de Habilidades
+          </h3>
+          <span id="globalLevelBadge" class="text-[11px] font-bold text-white rounded-full px-2.5 py-1 bg-indigo-600"></span>
+        </div>
+
+        <div class="px-5 py-4 bg-gradient-to-br from-indigo-600 to-violet-700">
+          <div class="flex items-end justify-between">
+            <div>
+              <p class="text-[11px] uppercase tracking-wider text-indigo-200 font-semibold">XP total · Nivel</p>
+              <p class="text-3xl font-bold text-white mt-0.5"><span id="xpTotalBig">0</span> <span class="text-base font-medium text-indigo-200">XP</span></p>
+              <p class="text-indigo-100 text-xs mt-1" id="xpSummaryLine"></p>
+            </div>
+            <div class="text-right">
+              <p class="text-[10px] uppercase tracking-wider text-indigo-300 font-semibold">Siguiente nivel</p>
+              <p class="text-sm font-semibold text-white" id="xpNextLevel"></p>
+            </div>
+          </div>
+          <div class="h-2.5 w-full bg-indigo-900/40 rounded-full overflow-hidden mt-3">
+            <div id="globalXpBar" class="xp-bar-fill h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-300" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="px-5 pt-4 pb-2 flex items-center justify-between">
+          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Habilidades</p>
+          <p class="text-[11px] text-gray-400">100 XP = 1 nivel</p>
+        </div>
+        <div id="xpModules" class="px-3 pb-4 space-y-2.5"></div>
+
+        <div class="px-5 py-4 border-t border-gray-200">
+          <p class="text-xs font-semibold text-gray-500 mb-2">Recompensas por tipo</p>
+          <div id="xpLegend" class="flex flex-wrap gap-1.5"></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div id="dayModalWrap" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/40" data-dayclose></div>
+    <div class="relative flex items-center justify-center h-full p-4">
+      <div class="w-full max-w-lg bg-white rounded-2xl shadow-2xl flex flex-col max-h-[85vh] animate-pop overflow-hidden">
+        <div class="flex items-start justify-between px-5 pt-5 pb-3 border-b border-gray-100 shrink-0">
+          <div>
+            <p id="dayWeekday" class="text-xs text-blue-600 font-semibold uppercase tracking-wide"></p>
+            <h3 id="dayDate" class="text-lg font-semibold text-gray-900"></h3>
+            <p id="daySummary" class="text-xs text-gray-400 mt-0.5"></p>
+          </div>
+          <button data-dayclose class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors" title="Cerrar">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div id="dayBody" class="flex-1 overflow-y-auto px-4 py-3 space-y-2"></div>
+        <div class="px-4 py-3 border-t border-gray-100 shrink-0">
+          <button id="btnDayAdd" class="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-blue-300 text-blue-600 font-medium py-2.5 hover:bg-blue-50 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            Añadir tarea
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="detailModalWrap" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/40" data-detailclose></div>
+    <div class="relative flex items-center justify-center h-full p-4">
+      <div class="w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 animate-pop">
+        <div class="flex items-start justify-between mb-3">
+          <p id="detailDate" class="text-xs text-gray-400 font-medium"></p>
+          <button data-detailclose class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <h3 id="detailTitle" class="text-lg font-semibold text-gray-900 leading-snug"></h3>
+        <div id="detailBadges" class="flex flex-wrap items-center gap-1.5 mt-3"></div>
+        <div id="detailDone" class="hidden mt-3 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-700"></div>
+        <p id="detailMeta" class="text-sm text-gray-500 mt-3"></p>
+        <div class="mt-5 space-y-2">
+          <button id="btnComplete" class="w-full text-white font-medium rounded-xl py-2.5 shadow-md transition-transform active:scale-[.98]"></button>
+          <div class="grid grid-cols-2 gap-2">
+            <button id="btnEdit" class="flex items-center justify-center gap-1.5 border border-gray-300 rounded-xl py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+              Editar
+            </button>
+            <button id="btnDelete" class="flex items-center justify-center gap-1.5 border border-red-200 text-red-600 rounded-xl py-2 text-sm font-medium hover:bg-red-50 transition-colors">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              Eliminar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="formModalWrap" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/40" data-close></div>
+    <div class="relative flex items-center justify-center h-full p-4">
+      <form id="taskForm" class="w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 animate-pop">
+        <div class="flex items-center justify-between mb-5">
+          <h2 id="modalTitle" class="text-lg font-semibold text-gray-900">Nueva tarea</h2>
+          <button type="button" data-close class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Título de la tarea</label>
+        <input id="fTitle" type="text" placeholder="Ej. Examen de Consultas SQL" class="w-full border border-gray-300 rounded-xl px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-shadow">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
+        <input id="fDate" type="date" class="w-full border border-gray-300 rounded-xl px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-shadow">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Asignatura</label>
+            <select id="fSubject" required class="w-full border border-gray-300 rounded-xl px-3 py-2 mb-1 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-shadow bg-white"></select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+            <select id="fType" class="w-full border border-gray-300 rounded-xl px-3 py-2 mb-1 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-shadow bg-white"></select>
+          </div>
+        </div>
+        <p id="xpPreview" class="text-xs text-gray-400 mt-2"></p>
+        <button id="fSubmit" type="submit" class="mt-4 w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-medium rounded-xl py-2.5 shadow-md transition-colors">Añadir tarea</button>
+      </form>
+    </div>
+  </div>
+
+  <button id="fab" class="fixed bottom-6 right-6 w-14 h-14 md:w-16 md:h-16 rounded-full bg-blue-600 hover:bg-blue-700 active:scale-95 text-white shadow-xl flex items-center justify-center z-40 transition-transform" title="Nueva tarea">
+    <svg class="w-7 h-7 md:w-8 md:h-8" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+  </button>
+
+  <div id="toast" class="fixed bottom-24 right-6 z-50 hidden animate-toast">
+    <div class="flex items-center gap-2 bg-gray-900 text-white text-sm font-medium px-4 py-2.5 rounded-full shadow-lg">
+      <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+      <span id="toastMsg"></span>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'dam_tasks_v4';
+    const XP_PER_LEVEL = 100;
+
+    const SUBJECTS = {
+      prog: { name: 'Programación', color: '#2563EB' },
+      sist: { name: 'Sistemas',     color: '#DC2626' },
+      bdd:  { name: 'BBDD',         color: '#EA580C' },
+      erp:  { name: 'ERP',          color: '#7C3AED' },
+      web:  { name: 'Web',          color: '#0891B2' },
+      ingl: { name: 'Inglés',       color: '#D97706' }
+    };
+
+    const TYPES = {
+      deberes:  { label: 'Deberes',  xp: 15, color: '#22C55E' },
+      practica: { label: 'Práctica', xp: 30, color: '#3B82F6' },
+      examen:   { label: 'Examen',   xp: 50, color: '#EF4444' }
+    };
+
+    const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const DIAS_CORTOS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+    const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+    let eventos = [];
+    let eventosByDate = {};
+    let view = { year: new Date().getFullYear(), month: new Date().getMonth() };
+    let selectedDate = null;
+    let selectedEventId = null;
+    let editingId = null;
+    let dayModalOpen = false;
+    let detailModalOpen = false;
+    let toastTimer = null;
+
+    const gridEl = document.getElementById('calendarGrid');
+    const labelsEl = document.getElementById('dayLabels');
+    const monthTitleEl = document.getElementById('monthTitle');
+    const totalXpLabel = document.getElementById('totalXpLabel');
+    const xpTotalBig = document.getElementById('xpTotalBig');
+    const xpSummaryLine = document.getElementById('xpSummaryLine');
+    const xpNextLevel = document.getElementById('xpNextLevel');
+    const globalXpBar = document.getElementById('globalXpBar');
+    const globalLevelBadge = document.getElementById('globalLevelBadge');
+    const xpModulesEl = document.getElementById('xpModules');
+    const xpLegendEl = document.getElementById('xpLegend');
+
+    const dayModalWrapEl = document.getElementById('dayModalWrap');
+    const dayWeekdayEl = document.getElementById('dayWeekday');
+    const dayDateEl = document.getElementById('dayDate');
+    const daySummaryEl = document.getElementById('daySummary');
+    const dayBodyEl = document.getElementById('dayBody');
+
+    const detailModalWrapEl = document.getElementById('detailModalWrap');
+    const detailDateEl = document.getElementById('detailDate');
+    const detailTitleEl = document.getElementById('detailTitle');
+    const detailBadgesEl = document.getElementById('detailBadges');
+    const detailDoneEl = document.getElementById('detailDone');
+    const detailMetaEl = document.getElementById('detailMeta');
+    const btnComplete = document.getElementById('btnComplete');
+
+    const formModalWrapEl = document.getElementById('formModalWrap');
+    const modalTitleEl = document.getElementById('modalTitle');
+    const formEl = document.getElementById('taskForm');
+    const fTitle = document.getElementById('fTitle');
+    const fDate = document.getElementById('fDate');
+    const fSubject = document.getElementById('fSubject');
+    const fType = document.getElementById('fType');
+    const fSubmit = document.getElementById('fSubmit');
+    const xpPreview = document.getElementById('xpPreview');
+    const toastEl = document.getElementById('toast');
+    const toastMsg = document.getElementById('toastMsg');
+
+    function iso(date) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return y + '-' + m + '-' + d;
+    }
+
+    function todayStr() {
+      return iso(new Date());
+    }
+
+    function parseIso(str) {
+      const p = str.split('-').map(Number);
+      return new Date(p[0], p[1] - 1, p[2]);
+    }
+
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function cap(s) {
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    }
+
+    function compareEvents(a, b) {
+      const d = (a.done ? 1 : 0) - (b.done ? 1 : 0);
+      if (d !== 0) return d;
+      return a.title.localeCompare(b.title);
+    }
+
+    function groupEvents() {
+      eventosByDate = {};
+      eventos.forEach(e => {
+        if (!TYPES[e.type]) e.type = 'deberes';
+        if (!SUBJECTS[e.subject]) e.subject = 'prog';
+        if (typeof e.done !== 'boolean') e.done = false;
+        if (!e.date) e.date = todayStr();
+        if (!e.id) e.id = 'legacy-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        (eventosByDate[e.date] = eventosByDate[e.date] || []).push(e);
+      });
+      Object.keys(eventosByDate).forEach(k => eventosByDate[k].sort(compareEvents));
+    }
+
+    function load() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw === null) {
+        seed();
+      } else {
+        try { eventos = JSON.parse(raw) || []; } catch (e) { eventos = []; }
+      }
+      groupEvents();
+    }
+
+    function save() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(eventos));
+    }
+
+    function seed() {
+      const base = new Date();
+      base.setDate(base.getDate() - ((base.getDay() + 6) % 7));
+      const mk = (offset, title, type, subject, done) => {
+        const d = new Date(base);
+        d.setDate(d.getDate() + offset);
+        return { id: 'seed-' + offset, title: title, date: iso(d), type: type, subject: subject, done: done };
+      };
+      eventos = [
+        mk(0, 'Examen de Consultas SQL', 'examen', 'bdd', false),
+        mk(1, 'Despliegue de servidor', 'practica', 'web', true),
+        mk(2, 'Ejercicios de bucles', 'deberes', 'prog', true)
+      ];
+      save();
+      groupEvents();
+    }
+
+    function moduleStats() {
+      const stats = {};
+      Object.keys(SUBJECTS).forEach(k => stats[k] = { xp: 0, done: 0, total: 0 });
+      let totalXp = 0;
+      eventos.forEach(e => {
+        const s = stats[e.subject];
+        if (!s) return;
+        s.total++;
+        if (e.done) {
+          s.xp += TYPES[e.type].xp;
+          s.done++;
+          totalXp += TYPES[e.type].xp;
+        }
+      });
+      return { stats: stats, totalXp: totalXp };
+    }
+
+    function levelOf(xp) {
+      return Math.floor(xp / XP_PER_LEVEL) + 1;
+    }
+
+    function showToast(msg) {
+      toastMsg.textContent = msg;
+      toastEl.classList.remove('hidden');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toastEl.classList.add('hidden'), 2400);
+    }
+
+    function renderLabels() {
+      let html = '';
+      DIAS_CORTOS.forEach((n, i) => {
+        html += '<div class="' + (i >= 5 ? 'text-red-400' : 'text-gray-500') + ' text-xs font-medium text-center pb-2 pt-1">' + n + '</div>';
+      });
+      labelsEl.innerHTML = html;
+    }
+
+    function renderLegend() {
+      let html = '';
+      Object.keys(TYPES).forEach(k => {
+        const t = TYPES[k];
+        html += '<span class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-white" style="background:' + t.color + '">' + t.label + ' +' + t.xp + '</span>';
+      });
+      xpLegendEl.innerHTML = html;
+    }
+
+    function chipsHtml(evs) {
+      if (!evs.length) return '';
+      let html = '<div class="mt-1 space-y-0.5">';
+      evs.slice(0, 3).forEach(e => {
+        const s = SUBJECTS[e.subject];
+        html += '<div class="cell-event ' + (e.done ? 'opacity-50' : '') + ' rounded px-1.5 py-0.5 text-[10px] md:text-[11px] leading-tight truncate text-white cursor-pointer" style="background:' + s.color + (e.done ? ';text-decoration:line-through' : '') + '" data-id="' + e.id + '" data-date="' + e.date + '">' + esc(e.title) + '</div>';
+      });
+      const rest = evs.length - 3;
+      if (rest > 0) {
+        html += '<div class="text-[10px] text-gray-400 font-medium px-1 pt-0.5">+' + rest + ' más</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function renderCalendar() {
+      const y = view.year;
+      const m = view.month;
+      const first = new Date(y, m, 1);
+      const offset = (first.getDay() + 6) % 7;
+      const daysInMonth = new Date(y, m + 1, 0).getDate();
+      const prevLast = new Date(y, m, 0).getDate();
+      const rows = Math.ceil((offset + daysInMonth) / 7);
+      const total = rows * 7;
+      const today = todayStr();
+
+      monthTitleEl.textContent = cap(MESES[m]) + ' ' + y;
+
+      let html = '';
+      for (let i = 0; i < total; i++) {
+        let d, inMonth;
+        if (i < offset) {
+          d = prevLast - offset + 1 + i;
+          inMonth = false;
+        } else if (i < offset + daysInMonth) {
+          d = i - offset + 1;
+          inMonth = true;
+        } else {
+          d = i - offset - daysInMonth + 1;
+          inMonth = false;
+        }
+        const dt = new Date(y, m, d);
+        const diso = iso(dt);
+        const dow = dt.getDay();
+        const isToday = diso === today;
+        const isWeekend = dow === 0 || dow === 6;
+        const evs = eventosByDate[diso] || [];
+
+        let cellCls = 'day-cell relative text-left align-top border-b border-r border-gray-100 p-1 md:p-1.5 min-h-[80px] md:min-h-[112px] cursor-pointer overflow-hidden ';
+        if (dow === 6) cellCls += 'border-r-0 ';
+        if (i >= total - 7) cellCls += 'border-b-0 ';
+        cellCls += inMonth ? (isWeekend ? 'bg-gray-50/60 ' : 'bg-white ') : 'bg-gray-50 ';
+        html += '<div class="' + cellCls + '" data-date="' + diso + '">';
+
+        let numCls = 'w-6 h-6 md:w-7 md:h-7 rounded-full flex items-center justify-center text-sm font-medium mx-auto ';
+        if (isToday) numCls += 'bg-blue-600 text-white shadow';
+        else if (!inMonth) numCls += 'text-gray-300';
+        else if (isWeekend) numCls += 'text-red-400';
+        else numCls += 'text-gray-800';
+        html += '<div class="flex items-center justify-center"><span class="' + numCls + '">' + d + '</span></div>';
+        html += chipsHtml(evs);
+        html += '</div>';
+      }
+      gridEl.innerHTML = html;
+    }
+
+    function formattedDate(isoStr) {
+      const dt = parseIso(isoStr);
+      return DIAS[dt.getDay()] + ', ' + dt.getDate() + ' de ' + MESES[dt.getMonth()] + ' de ' + dt.getFullYear();
+    }
+
+    function dayRowHtml(e) {
+      const t = TYPES[e.type];
+      const s = SUBJECTS[e.subject];
+      return '<div class="task-row flex items-start gap-3 rounded-xl border border-gray-200 p-3 hover:bg-gray-50 transition-colors cursor-pointer">' +
+        '<div class="w-1.5 self-stretch shrink-0 rounded-full" style="background:' + s.color + '"></div>' +
+        '<input type="checkbox" data-id="' + e.id + '"' + (e.done ? ' checked' : '') + ' class="mt-0.5 h-5 w-5 cursor-pointer rounded shrink-0" style="accent-color:' + s.color + '">' +
+        '<div class="flex-1 min-w-0">' +
+          '<p class="truncate text-sm ' + (e.done ? 'text-gray-400 line-through' : 'text-gray-800 font-medium') + '" title="' + esc(e.title) + '">' + esc(e.title) + '</p>' +
+          '<div class="flex flex-wrap items-center gap-1.5 mt-1">' +
+            '<span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold" style="background:' + t.color + '22;color:' + t.color + '">' + t.label + ' +' + t.xp + ' XP</span>' +
+            '<span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-white" style="background:' + s.color + '">' + s.name + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="flex items-center gap-0.5 shrink-0">' +
+          '<button data-act="edit" data-id="' + e.id + '" title="Editar" class="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">' +
+            '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>' +
+          '</button>' +
+          '<button data-act="del" data-id="' + e.id + '" title="Eliminar" class="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">' +
+            '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>' +
+          '</button>' +
+        '</div>' +
+      '</div>';
+    }
+
+    function renderDayModal() {
+      const evs = (eventosByDate[selectedDate] || []).slice().sort(compareEvents);
+      const doneCount = evs.filter(e => e.done).length;
+      dayWeekdayEl.textContent = cap(DIAS[parseIso(selectedDate).getDay()]);
+      dayDateEl.textContent = formattedDate(selectedDate);
+      daySummaryEl.textContent = evs.length + ' tarea' + (evs.length === 1 ? '' : 's') + ' · ' + doneCount + ' completada' + (doneCount === 1 ? '' : 's');
+      if (!evs.length) {
+        dayBodyEl.innerHTML =
+          '<div class="pt-8 pb-2 text-center">' +
+            '<div class="mx-auto w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center mb-3">' +
+              '<svg class="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>' +
+            '</div>' +
+            '<p class="text-sm font-medium text-gray-700">Sin tareas este día</p>' +
+            '<p class="text-xs text-gray-400 mt-1">Pulsa + para añadir una</p>' +
+          '</div>';
+      } else {
+        dayBodyEl.innerHTML = evs.map(dayRowHtml).join('');
+      }
+    }
+
+    function openDayModal(dateStr) {
+      selectedDate = dateStr;
+      dayModalOpen = true;
+      renderCalendar();
+      renderDayModal();
+      dayModalWrapEl.classList.remove('hidden');
+    }
+
+    function closeDayModal() {
+      dayModalOpen = false;
+      dayModalWrapEl.classList.add('hidden');
+      selectedDate = null;
+      renderCalendar();
+    }
+
+    function openDetail(id) {
+      selectedEventId = id;
+      detailModalOpen = true;
+      renderDetail();
+      renderCalendar();
+      detailModalWrapEl.classList.remove('hidden');
+    }
+
+    function closeDetail() {
+      detailModalOpen = false;
+      detailModalWrapEl.classList.add('hidden');
+      selectedEventId = null;
+    }
+
+    function renderDetail() {
+      const e = eventos.find(x => x.id === selectedEventId);
+      if (!e) { closeDetail(); return; }
+      const t = TYPES[e.type];
+      const s = SUBJECTS[e.subject];
+      detailDateEl.textContent = formattedDate(e.date);
+      detailTitleEl.textContent = e.title;
+      detailTitleEl.classList.toggle('line-through', e.done);
+      detailTitleEl.classList.toggle('text-gray-400', e.done);
+      detailTitleEl.classList.toggle('text-gray-900', !e.done);
+      detailBadgesEl.innerHTML =
+        '<span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-white" style="background:' + s.color + '">' +
+          '<span class="w-1.5 h-1.5 rounded-full bg-white/80"></span>' + s.name +
+        '</span>' +
+        '<span class="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold" style="background:' + t.color + '22;color:' + (e.done ? '#059669' : t.color) + '">' + t.label + ' · +' + t.xp + ' XP</span>';
+      detailMetaEl.textContent = 'Al completar esta tarea ganarás +' + t.xp + ' XP en ' + s.name + ' (' + SUBJECTS[e.subject].name + ' · Nivel ' + levelOf(moduleCoreXp(e.subject)) + ').';
+      if (e.done) {
+        detailDoneEl.classList.remove('hidden');
+        detailDoneEl.textContent = '✓ Completada · ya has sumado +' + t.xp + ' XP';
+      } else {
+        detailDoneEl.classList.add('hidden');
+      }
+      btnComplete.innerHTML = e.done
+        ? '<svg class="w-5 h-5 mx-auto" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>'
+        : '<svg class="w-5 h-5 inline" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+      btnComplete.innerHTML += e.done ? ' Deshacer (-' + t.xp + ' XP)' : ' Completar tarea (+' + t.xp + ' XP)';
+      btnComplete.style.background = e.done ? '#6B7280' : s.color;
+      btnComplete.classList.remove('hidden');
+    }
+
+    function moduleCoreXp(subject) {
+      return (moduleStats().stats[subject] || { xp: 0 }).xp;
+    }
+
+    function openForm(dateStr, id) {
+      editingId = id || null;
+      const ev = id ? eventos.find(e => e.id === id) : null;
+      modalTitleEl.textContent = ev ? 'Editar tarea' : 'Nueva tarea';
+      fTitle.value = ev ? ev.title : '';
+      fDate.value = ev ? ev.date : (dateStr || todayStr());
+      fSubject.value = ev ? ev.subject : 'prog';
+      fType.value = ev ? ev.type : 'deberes';
+      updateXpPreview();
+      fSubmit.textContent = ev ? 'Guardar cambios' : 'Añadir tarea';
+      formModalWrapEl.classList.remove('hidden');
+      setTimeout(function () { fTitle.focus(); }, 60);
+    }
+
+    function closeForm() {
+      formModalWrapEl.classList.add('hidden');
+      editingId = null;
+    }
+
+    function updateXpPreview() {
+      xpPreview.textContent = 'Recompensa: +' + TYPES[fType.value].xp + ' XP para ' + SUBJECTS[fSubject.value].name + '.';
+      xpPreview.style.color = SUBJECTS[fSubject.value].color;
+    }
+
+    function refresh() {
+      groupEvents();
+      renderCalendar();
+      renderStats();
+      if (dayModalOpen && selectedDate && eventosByDate[selectedDate]) renderDayModal();
+      if (detailModalOpen) renderDetail();
+    }
+
+    function toggleComplete(id) {
+      const ev = eventos.find(e => e.id === id);
+      if (!ev) return;
+      ev.done = !ev.done;
+      save();
+      const t = TYPES[ev.type];
+      const s = SUBJECTS[ev.subject];
+      showToast(ev.done ? '✓ ' + ev.title + ' completada · +' + t.xp + ' XP en ' + s.name : 'Cambio deshecho · -' + t.xp + ' XP');
+      refresh();
+    }
+
+    function removeEvent(id) {
+      const ev = eventos.find(e => e.id === id);
+      eventos = eventos.filter(e => e.id !== id);
+      save();
+      groupEvents();
+      renderCalendar();
+      renderStats();
+      if (dayModalOpen && selectedDate && eventosByDate[selectedDate]) renderDayModal();
+      if (detailModalOpen && selectedEventId === id) closeDetail();
+      if (editingId === id) closeForm();
+      showToast('Tarea eliminada');
+    }
+
+    function renderStats() {
+      const { stats, totalXp } = moduleStats();
+      const done = eventos.filter(e => e.done).length;
+      const pend = eventos.length - done;
+      const gLevel = levelOf(totalXp);
+      const gNext = XP_PER_LEVEL - (totalXp % XP_PER_LEVEL);
+
+      totalXpLabel.textContent = totalXp + ' XP';
+      xpTotalBig.textContent = totalXp;
+      xpSummaryLine.textContent = done + ' completadas · ' + pend + ' pendientes';
+      xpNextLevel.textContent = gNext + ' XP';
+      globalXpBar.style.width = Math.min((totalXp % XP_PER_LEVEL) / XP_PER_LEVEL * 100, 100) + '%';
+      globalLevelBadge.textContent = 'Lv. ' + gLevel;
+
+      let html = '';
+      Object.keys(SUBJECTS).forEach(k => {
+        const s = SUBJECTS[k];
+        const st = stats[k];
+        const progress = (st.xp % XP_PER_LEVEL) / XP_PER_LEVEL * 100;
+        const next = XP_PER_LEVEL - (st.xp % XP_PER_LEVEL);
+        html += '<div class="px-3 py-3 rounded-xl border border-gray-100 hover:shadow-sm transition-shadow">' +
+          '<div class="flex items-center justify-between mb-1.5">' +
+            '<div class="flex items-center gap-2 min-w-0">' +
+              '<span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:' + s.color + '"></span>' +
+              '<span class="text-sm font-medium text-gray-800 truncate">' + s.name + '</span>' +
+            '</div>' +
+            '<div class="flex items-center gap-1.5 shrink-0">' +
+              '<span class="text-[10px] font-bold text-white rounded-full px-2 py-0.5" style="background:' + s.color + '">Lv.' + levelOf(st.xp) + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="h-2 w-full bg-gray-100 rounded-full overflow-hidden">' +
+            '<div class="xp-bar-fill h-full rounded-full" style="width:' + Math.min(progress, 100) + '%;background:linear-gradient(90deg,' + s.color + '66,' + s.color + ')"></div>' +
+          '</div>' +
+          '<div class="flex items-center justify-between mt-1 text-[11px]">' +
+            '<span class="text-gray-500 font-medium">' + st.xp + ' / ' + XP_PER_LEVEL + ' XP</span>' +
+            '<span class="text-gray-400">Faltan ' + next + ' · ' + st.done + '/' + st.total + ' hechas</span>' +
+          '</div>' +
+        '</div>';
+      });
+      xpModulesEl.innerHTML = html;
+    }
+
+    formEl.addEventListener('submit', function (e) {
+      e.preventDefault();
+      const title = fTitle.value.trim() || 'Sin título';
+      const date = fDate.value;
+      const type = fType.value;
+      const subject = fSubject.value;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        showToast('Selecciona una fecha válida');
+        return;
+      }
+      if (!SUBJECTS[subject]) {
+        showToast('Elige una asignatura obligatoria');
+        return;
+      }
+      if (!TYPES[type]) {
+        showToast('Elige un tipo válido');
+        return;
+      }
+      if (editingId) {
+        const ev = eventos.find(x => x.id === editingId);
+        if (ev) {
+          ev.title = title;
+          ev.date = date;
+          ev.type = type;
+          ev.subject = subject;
+        }
+        save();
+        showToast('Tarea actualizada');
+      } else {
+        eventos.push({ id: 'ev-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), title: title, date: date, type: type, subject: subject, done: false });
+        save();
+        showToast('Tarea añadida');
+      }
+      groupEvents();
+      closeForm();
+      renderCalendar();
+      renderStats();
+      if (dayModalOpen && selectedDate && eventosByDate[selectedDate]) renderDayModal();
+    });
+
+    document.getElementById('btnPrev').addEventListener('click', function () {
+      view.month--;
+      if (view.month < 0) { view.month = 11; view.year--; }
+      renderCalendar();
+    });
+
+    document.getElementById('btnNext').addEventListener('click', function () {
+      view.month++;
+      if (view.month > 11) { view.month = 0; view.year++; }
+      renderCalendar();
+    });
+
+    document.getElementById('btnToday').addEventListener('click', function () {
+      const n = new Date();
+      view.year = n.getFullYear();
+      view.month = n.getMonth();
+      renderCalendar();
+    });
+
+    document.getElementById('btnDayAdd').addEventListener('click', function () {
+      openForm(selectedDate);
+    });
+
+    document.getElementById('fab').addEventListener('click', function () {
+      openForm(selectedDate || todayStr());
+    });
+
+    btnComplete.addEventListener('click', function () {
+      if (selectedEventId) toggleComplete(selectedEventId);
+    });
+
+    document.getElementById('btnEdit').addEventListener('click', function () {
+      const ev = eventos.find(x => x.id === selectedEventId);
+      if (ev) openForm(ev.date, ev.id);
+    });
+
+    document.getElementById('btnDelete').addEventListener('click', function () {
+      if (selectedEventId) removeEvent(selectedEventId);
+    });
+
+    document.querySelectorAll('[data-dayclose]').forEach(function (el) {
+      el.addEventListener('click', closeDayModal);
+    });
+
+    document.querySelectorAll('[data-detailclose]').forEach(function (el) {
+      el.addEventListener('click', closeDetail);
+    });
+
+    document.querySelectorAll('[data-close]').forEach(function (el) {
+      el.addEventListener('click', closeForm);
+    });
+
+    gridEl.addEventListener('click', function (e) {
+      const evEl = e.target.closest('.cell-event');
+      if (evEl) {
+        e.stopPropagation();
+        openDetail(evEl.dataset.id);
+        return;
+      }
+      const cell = e.target.closest('.day-cell');
+      if (cell) openDayModal(cell.dataset.date);
+    });
+
+    dayBodyEl.addEventListener('change', function (e) {
+      const cb = e.target.closest('input[type="checkbox"]');
+      if (cb) toggleComplete(cb.dataset.id);
+    });
+
+    dayBodyEl.addEventListener('click', function (e) {
+      const btn = e.target.closest('[data-act]');
+      if (btn) {
+        const id = btn.dataset.id;
+        if (btn.dataset.act === 'del') removeEvent(id);
+        if (btn.dataset.act === 'edit') {
+          const ev = eventos.find(x => x.id === id);
+          if (ev) openForm(ev.date, ev.id);
+        }
+        return;
+      }
+      if (e.target.closest('input[type="checkbox"]')) return;
+      const row = e.target.closest('.task-row');
+      if (row) {
+        const cb = row.querySelector('input[type="checkbox"]');
+        if (cb) openDetail(cb.dataset.id);
+      }
+    });
+
+    fSubject.addEventListener('change', updateXpPreview);
+    fType.addEventListener('change', updateXpPreview);
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') {
+        if (!formModalWrapEl.classList.contains('hidden')) closeForm();
+        if (!dayModalWrapEl.classList.contains('hidden')) closeDayModal();
+        if (!detailModalWrapEl.classList.contains('hidden')) closeDetail();
+      }
+    });
+
+    function fillSelects() {
+      fSubject.innerHTML = Object.keys(SUBJECTS).map(k =>
+        '<option value="' + k + '">' + SUBJECTS[k].name + '</option>'
+      ).join('');
+      fType.innerHTML = Object.keys(TYPES).map(k =>
+        '<option value="' + k + '">' + TYPES[k].label + ' (+' + TYPES[k].xp + ' XP)</option>'
+      ).join('');
+    }
+
+    load();
+    fillSelects();
+    renderLabels();
+    renderLegend();
+    renderStats();
+    renderCalendar();
+  </script>
+</body>
+</html>
