@@ -299,6 +299,16 @@
       return new Date(p[0], p[1] - 1, p[2]);
     }
 
+    /* Clave válida de fecha: YYYY-MM-DD real (existe en el calendario). */
+    function normDate(str) {
+      if (typeof str !== 'string') return null;
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str.trim());
+      if (!m) return null;
+      const y = +m[1], mo = +m[2], d = +m[3];
+      if (mo < 1 || mo > 12 || d < 1 || d > new Date(y, mo, 0).getDate()) return null;
+      return iso(new Date(y, mo - 1, d));
+    }
+
     function esc(s) {
       return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
@@ -319,8 +329,9 @@
         if (!TYPES[e.type]) e.type = 'deberes';
         if (!SUBJECTS[e.subject]) e.subject = 'prog';
         if (typeof e.done !== 'boolean') e.done = false;
-        if (!e.date) e.date = todayStr();
         if (!e.id) e.id = 'legacy-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        /* Normaliza la clave a YYYY-MM-DD local; si la fecha es inválida, cae a hoy */
+        e.date = normDate(e.date) || todayStr();
         (eventosByDate[e.date] = eventosByDate[e.date] || []).push(e);
       });
       Object.keys(eventosByDate).forEach(k => eventosByDate[k].sort(compareEvents));
@@ -423,7 +434,6 @@
       const first = new Date(y, m, 1);
       const offset = (first.getDay() + 6) % 7;
       const daysInMonth = new Date(y, m + 1, 0).getDate();
-      const prevLast = new Date(y, m, 0).getDate();
       const rows = Math.ceil((offset + daysInMonth) / 7);
       const total = rows * 7;
       const today = todayStr();
@@ -432,19 +442,13 @@
 
       let html = '';
       for (let i = 0; i < total; i++) {
-        let d, inMonth;
-        if (i < offset) {
-          d = prevLast - offset + 1 + i;
-          inMonth = false;
-        } else if (i < offset + daysInMonth) {
-          d = i - offset + 1;
-          inMonth = true;
-        } else {
-          d = i - offset - daysInMonth + 1;
-          inMonth = false;
-        }
-        const dt = new Date(y, m, d);
+        /* Índice absoluto anclado al día 1 del mes visible. El constructor Date
+           normaliza el desbordamiento hacia el mes anterior/siguiente (comportamiento
+           definido en ES), así que las celdas de relleno obtienen su fecha real.
+           La clave de búsqueda es siempre el YYYY-MM-DD completo de la celda. */
+        const dt = new Date(y, m, 1 - offset + i);
         const diso = iso(dt);
+        const inMonth = dt.getFullYear() === y && dt.getMonth() === m;
         const dow = dt.getDay();
         const isToday = diso === today;
         const isWeekend = dow === 0 || dow === 6;
@@ -461,7 +465,7 @@
         else if (!inMonth) numCls += 'text-gray-300';
         else if (isWeekend) numCls += 'text-red-400';
         else numCls += 'text-gray-800';
-        html += '<div class="flex items-center justify-center"><span class="' + numCls + '">' + d + '</span></div>';
+        html += '<div class="flex items-center justify-center"><span class="' + numCls + '">' + dt.getDate() + '</span></div>';
         html += chipsHtml(evs);
         html += '</div>';
       }
